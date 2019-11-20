@@ -1,4 +1,4 @@
-import * as Promise from 'bluebird';
+import Promise from 'bluebird';
 import * as React from 'react';
 import { ListGroup } from 'react-bootstrap';
 import { DragSource, DropTarget, ConnectDragSource, ConnectDragPreview, ConnectDropTarget, DragSourceSpec, DropTargetConnector, DropTargetMonitor, DragSourceConnector, DragSourceMonitor, DropTargetSpec } from 'react-dnd';

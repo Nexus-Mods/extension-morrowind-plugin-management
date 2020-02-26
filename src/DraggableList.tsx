@@ -1,7 +1,10 @@
 import Promise from 'bluebird';
 import * as React from 'react';
 import { ListGroup } from 'react-bootstrap';
-import { DragSource, DropTarget, ConnectDragSource, ConnectDragPreview, ConnectDropTarget, DragSourceSpec, DropTargetConnector, DropTargetMonitor, DragSourceConnector, DragSourceMonitor, DropTargetSpec } from 'react-dnd';
+import {
+  ConnectDragPreview, ConnectDragSource, ConnectDropTarget,
+  DragSource, DragSourceConnector, DragSourceMonitor,
+  DragSourceSpec, DropTarget, DropTargetConnector, DropTargetMonitor, DropTargetSpec } from 'react-dnd';
 import * as ReactDOM from 'react-dom';
 import { ComponentEx, util } from 'vortex-api';
 
@@ -11,7 +14,10 @@ interface IItemBaseProps {
   itemRenderer: React.ComponentClass<{ className?: string, item: any }>;
   containerId: string;
   take: (item: any, list: any[]) => any;
-  onChangeIndex: (oldIndex: number, newIndex: number, changeContainer: boolean, take: (list: any[]) => any) => void;
+  onChangeIndex: (oldIndex: number,
+                  newIndex: number,
+                  changeContainer: boolean,
+                  take: (list: any[]) => any) => void;
   apply: () => void;
 }
 
@@ -113,7 +119,7 @@ const entryTarget: DropTargetSpec<IItemProps> = {
   },
   drop(props) {
     props.apply();
-  }
+  },
 };
 
 const Draggable = DropTarget(DND_TYPE, entryTarget, collectDrop)(
@@ -149,7 +155,7 @@ class DraggableList extends ComponentEx<IProps, IState> {
 
   }
 
-  public componentWillReceiveProps(newProps: IProps) {
+  public UNSAFE_componentWillReceiveProps(newProps: IProps) {
     if (this.props.items !== newProps.items) {
       this.nextState.ordered = newProps.items.slice(0);
     }
@@ -158,23 +164,24 @@ class DraggableList extends ComponentEx<IProps, IState> {
   public render(): JSX.Element {
     const { connectDropTarget, id, itemRenderer } = this.props;
     const { ordered } = this.state;
-    return connectDropTarget(
+    return connectDropTarget((
       <div style={{ height: '100%' }}>
         <ListGroup>
           {ordered.map((item, idx) => (
-              <Draggable
-                containerId={id}
-                key={item}
-                item={item}
-                index={idx}
-                itemRenderer={itemRenderer}
-                take={this.take}
-                onChangeIndex={this.changeIndex}
-                apply={this.apply}
-              />
-            ))}
+            <Draggable
+              containerId={id}
+              key={item}
+              item={item}
+              index={idx}
+              itemRenderer={itemRenderer}
+              take={this.take}
+              onChangeIndex={this.changeIndex}
+              apply={this.apply}
+            />
+          ))}
         </ListGroup>
-      </div>);
+      </div>
+    ));
   }
 
   public changeIndex = (oldIndex: number, newIndex: number, changeContainer: boolean,

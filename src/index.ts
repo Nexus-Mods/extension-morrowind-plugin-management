@@ -1,14 +1,14 @@
 import PluginList from './PluginList';
 
-import * as Promise from 'bluebird';
+import Promise from 'bluebird';
 import * as path from 'path';
-import { fs, selectors, types, util, log } from 'vortex-api';
+import { fs, log, selectors, types, util } from 'vortex-api';
 import IniParser, { WinapiFormat } from 'vortex-parse-ini';
 
 let watcher: fs.FSWatcher;
 let refresher: util.Debouncer;
 
-let reactive = util.makeReactive({
+const reactive = util.makeReactive({
   knownPlugins: [],
   pluginOrder: [],
 });

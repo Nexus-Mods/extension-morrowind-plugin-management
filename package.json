@@ -34,7 +34,7 @@
     "react-dnd": "^7.3.1",
     "ts-loader": "^4.4.2",
     "typescript": "^3.6.2",
-    "vortex-api": "Nexus-Mods/vortex-api#electron7",
+    "vortex-api": "Nexus-Mods/vortex-api",
     "vortex-parse-ini": "Nexus-Mods/vortex-parse-ini",
     "webpack": "^4.17.1",
     "webpack-cli": "^3.3.7"

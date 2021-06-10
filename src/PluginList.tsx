@@ -4,24 +4,30 @@ import PluginEntry from './PluginEntry';
 import * as React from 'react';
 import { Panel } from 'react-bootstrap';
 import { withTranslation } from 'react-i18next';
-import { ComponentEx, DNDContainer, FlexLayout, MainPage } from 'vortex-api';
+import { connect } from 'react-redux';
+import { ComponentEx, DNDContainer, FlexLayout, MainPage, util } from 'vortex-api';
+
+import { NAMESPACE } from './statics';
+
+import { ILocalState } from './types';
 
 const PanelX: any = Panel;
 
-export interface IPluginListProps {
-  localState: {
-    knownPlugins: string[],
-    pluginOrder: string[],
-  };
-
+interface IPluginListProps {
   onSetPluginOrder: (enabled: string[]) => void;
 }
 
-class PluginList extends ComponentEx<IPluginListProps, {}> {
+interface IConnectedProps {
+  localState: ILocalState;
+}
+
+type IProps = IPluginListProps & IConnectedProps;
+
+class PluginList extends ComponentEx<IProps, {}> {
   public render(): JSX.Element {
     const { t } = this.props;
     const { knownPlugins, pluginOrder } = this.props.localState;
-    const disabledPlugins = knownPlugins.filter(plugin => pluginOrder.indexOf(plugin) === -1);
+    const disabledPlugins = (knownPlugins || []).filter(plugin => (pluginOrder || []).indexOf(plugin) === -1);
 
     return (
       <MainPage>
@@ -38,7 +44,7 @@ class PluginList extends ComponentEx<IPluginListProps, {}> {
                       <FlexLayout.Flex>
                         <DraggableList
                           id='enabled'
-                          items={pluginOrder}
+                          items={pluginOrder || []}
                           itemRenderer={PluginEntry}
                           apply={this.applyEnabled}
                         />
@@ -78,5 +84,17 @@ class PluginList extends ComponentEx<IPluginListProps, {}> {
   }
 }
 
-export default withTranslation(['common', 'morrowind-plugins'])(
-  PluginList as any) as React.ComponentClass<IPluginListProps>;
+const emptyObj = {};
+function mapStateToProps(state: any, ownProps: IProps): IConnectedProps {
+  return {
+    localState: util.getSafe(state, ['session', 'morrowind'], emptyObj) as any,
+  };
+}
+
+function mapDispatchToProps(dispatch: any): any {
+  return emptyObj;
+}
+
+export default withTranslation(['common', NAMESPACE])(
+  connect(mapStateToProps, mapDispatchToProps)(
+    PluginList) as any) as React.ComponentClass<IPluginListProps>;

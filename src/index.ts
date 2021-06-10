@@ -5,13 +5,18 @@ import * as path from 'path';
 import { fs, log, selectors, types, util } from 'vortex-api';
 import IniParser, { WinapiFormat } from 'vortex-parse-ini';
 
+import { setPluginsOrder, setLocalState } from './actions';
+import { SessionReducer } from './reducers';
+
+import { genCollectionsData, parseCollectionsData } from './collections/collections';
+import CollectionsDataView from './collections/CollectionsDataView';
+import { IExtendedInterfaceProps, IMorrowindCollectionsData } from './collections/types';
+import { GAME_ID } from './statics';
+
 let watcher: fs.FSWatcher;
 let refresher: util.Debouncer;
 
-const reactive = util.makeReactive({
-  knownPlugins: [],
-  pluginOrder: [],
-});
+let _MANIFEST: types.IDeploymentManifest;
 
 function onFileChanged(event: string, fileName: string) {
   if (event === 'rename') {
@@ -23,7 +28,7 @@ function onFileChanged(event: string, fileName: string) {
 }
 
 function startWatch(state: types.IState) {
-  const discovery = state.settings.gameMode.discovered['morrowind'];
+  const discovery = state.settings.gameMode.discovered[GAME_ID];
   if ((discovery === undefined) || (discovery.path === undefined)) {
     // this shouldn't happen because startWatch is only called if the
     // game is activated and it has to be discovered for that
@@ -75,12 +80,17 @@ function updatePluginTimestamps(dataPath: string, plugins: string[]): Promise<vo
   }).then(() => undefined);
 }
 
-function refreshPlugins(api: types.IExtensionApi): Promise<void> {
+export function refreshPlugins(api: types.IExtensionApi): Promise<void> {
   const state = api.store.getState();
-  const discovery = state.settings.gameMode.discovered['morrowind'];
+  const discovery = state.settings.gameMode.discovered[GAME_ID];
   if ((discovery === undefined) || (discovery.path === undefined)) {
     return Promise.resolve();
   }
+
+  const normalize = (plugin: string) => path.basename(plugin).toLowerCase();
+  const findPluginSource = (plugin: string) => _MANIFEST?.files !== undefined
+    ? _MANIFEST.files.find(file => normalize(file.relPath) === normalize(plugin))?.source
+    : undefined;
 
   return fs.readdirAsync(path.join(discovery.path, 'Data Files'))
     .filter((fileName: string) =>
@@ -89,49 +99,85 @@ function refreshPlugins(api: types.IExtensionApi): Promise<void> {
       readGameFiles(path.join(discovery.path, 'Morrowind.ini'))
         .then(gameFiles => ({ plugins, gameFiles })))
     .then(result => {
-      reactive.knownPlugins = result.plugins;
-      reactive.pluginOrder = result.gameFiles;
+      const sources = result.plugins.reduce((accum, iter) => {
+        const source = findPluginSource(iter);
+        if (source !== undefined) {
+          accum[iter] = source;
+        }
+        return accum;
+      }, {});
+
+      result.gameFiles = result.gameFiles.filter(plugin => result.plugins.includes(plugin));
+
+      api.store.dispatch(setLocalState(result.plugins, result.gameFiles, sources));
+    });
+}
+
+export function setPluginOrder(api: types.IExtensionApi, plugins: string[]) {
+  const state = api.store.getState();
+  const discovery = state.settings.gameMode.discovered[GAME_ID];
+  const iniFilePath = path.join(discovery.path, 'Morrowind.ini');
+  updatePluginOrder(iniFilePath, plugins)
+    .then(() => updatePluginTimestamps(path.join(discovery.path, 'Data Files'), plugins))
+    .then(() => api.store.dispatch(setPluginsOrder(plugins)))
+    .catch(err => {
+      api.showErrorNotification('Failed to update morrowind.ini',
+                                        err, { allowReport: false });
     });
 }
 
 function init(context: types.IExtensionContext) {
+  context.registerReducer(['session', 'morrowind'], SessionReducer);
   context.registerMainPage('plugins', 'Plugins', PluginList, {
     id: 'morrowind-plugins',
     hotkey: 'E',
     group: 'per-game',
-    visible: () => selectors.activeGameId(context.api.store.getState()) === 'morrowind',
+    visible: () => selectors.activeGameId(context.api.store.getState()) === GAME_ID,
     props: () => ({
-      localState: reactive,
-      onSetPluginOrder: (plugins: string[]) => {
-        const state = context.api.store.getState();
-        reactive.pluginOrder = plugins;
-        const discovery = state.settings.gameMode.discovered['morrowind'];
-        const iniFilePath = path.join(discovery.path, 'Morrowind.ini');
-        updatePluginOrder(iniFilePath, plugins)
-          .then(() => updatePluginTimestamps(path.join(discovery.path, 'Data Files'), plugins))
-          .catch(err => {
-            context.api.showErrorNotification('Failed to update morrowind.ini',
-                                              err, { allowReport: false });
-          });
-      },
+      onSetPluginOrder: (plugins: string[]) => setPluginOrder(context.api, plugins),
     }),
   });
 
+  context['registerCollectionFeature'](
+    'morrowind_collection_data',
+    (gameId: string, includedMods: string[]) =>
+      genCollectionsData(context, gameId, includedMods),
+    (gameId: string, collection: IMorrowindCollectionsData) =>
+      parseCollectionsData(context, gameId, collection),
+    (t) => t('Morrowind Data'),
+    (state: types.IState, gameId: string) => gameId === GAME_ID,
+    (CollectionsDataView),
+  );
+
   context.once(() => {
     context.api.events.on('gamemode-activated', (gameMode: string) => {
-      if (gameMode === 'morrowind') {
-        startWatch(context.api.store.getState());
+      if (gameMode === GAME_ID) {
+        util.getManifest(context.api, '', GAME_ID)
+          .then(manifest => {
+            _MANIFEST = manifest;
+            startWatch(context.api.store.getState());
+          });
       } else {
         stopWatch();
       }
     });
 
+    refresher = new util.Debouncer(() =>
+      refreshPlugins(context.api), 1000);
+    refresher.schedule();
+
+    context.api.onAsync('did-deploy', (profileId, deployment) => {
+      const state = context.api.getState();
+      const profile = selectors.profileById(state, profileId);
+      if (profile?.gameId !== GAME_ID) {
+        return Promise.resolve();
+      }
+      _MANIFEST = { version: 0, instance: '', files: deployment[''] };
+      return refreshPlugins(context.api);
+    });
+
     context.api.setStylesheet('morrowind-plugin-management',
                               path.join(__dirname, 'stylesheet.scss'));
-
-    refresher = new util.Debouncer(() =>
-      refreshPlugins(context.api), 2000);
-    refresher.schedule();
 
   });
 }
